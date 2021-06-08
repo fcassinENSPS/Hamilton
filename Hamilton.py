@@ -8,8 +8,7 @@ from tqdm import tqdm
 
 class Hamilton:
     """
-	Hamilton class gathering the potential calculation and dynamics
-	Fourier class gathering the PSD calculation for PSF reconstruction. 
+	Hamilton class gathering the potential calculation and particles dynamics
     Inputs are:
         - B magnetic field
         - e sign charge
@@ -94,6 +93,7 @@ class Hamilton:
     	    u[:,i+1] = u[:,i] + v[:,i]*dt
         return u
     
+    """
     def potential(self,x,y,t):
 		#A = self.k**2/self.w0*self.phi1/self.B
         A = self.A
@@ -113,41 +113,12 @@ class Hamilton:
         		dphidx += -A*(np.sin(x+np.pi/2.0)*np.cos(y+np.pi/2.0-float((i+1))*t)+np.sin(x+np.pi/2.0)*np.cos(y+np.pi/2.0+float((i+1))*t))
         		#phi += A*(np.cos(x+np.pi/2)*np.cos(y+np.pi/2-(i+1)*t))
 
-        """
-		kx = np.linspace(-x,x,Nx)	#
-		ky = np.linspace(-y,y,Ny)	# grille spatial pour phi
-		kx,ky = np.meshgrid(kx,ky)	#
-		t = np.linspace(-100,100,201)*T
-		
-		somme = kx*0
-
-        t = np.linspace(-400,400,801)*self.dt
-        somme = 0
-        
-        for i in t:
-        	somme += np.cos(x)*np.cos(y-2*i) + np.cos(x+np.pi/2)*np.cos(y+np.pi/2-(2*i+1))
-        
-        somme = (np.cos(x+y)+np.cos(x-y))
-        
-        phi = A *np.pi* somme
-        """
         return phi,dphidy,dphidx
+    """
 
     def potentialb(self,x,y,t):
         A = self.A
 
-        
-        """
-        Mt2n = np.linspace(-2*self.M,2*self.M,(2*self.M+1))*t
-        Mt2n1 = np.linspace(-2*self.M+1,2*self.M-1,(2*self.M))*t
-        
-        if (self.M%2)==0:
-            Mt2n = np.linspace(-self.M,self.M,(2*self.M+1))*t
-            Mt2n1 = np.linspace(-self.M+1,self.M-1,(self.M))*t
-        else:
-            Mt2n = np.linspace(-self.M+1,self.M-1,(self.M))*t
-            Mt2n1 = np.linspace(-self.M,self.M,(self.M+1))*t
-        """
         Mt2n = self.Mt2n*t
         Mt2n1 = self.Mt2n1*t
 
@@ -164,6 +135,7 @@ class Hamilton:
             da2n1dy = self.a2n1*A*sinx*(np.sum(np.cos(y2n1-Mt2n1),axis=0))
             da2n1dx = self.a2n1*A*cosx*(np.sum(np.sin(y2n1-Mt2n1),axis=0))
         else:
+
             theta = np.linspace(0,2*np.pi,10)
             rhoc = self.rho*np.cos(theta)
             rhos = self.rho*np.sin(theta)
@@ -171,50 +143,29 @@ class Hamilton:
 
             cosx = np.cos(xb + rhocb)
             sinx = np.sin(xb + rhocb)
-            print('cos(x+theta)')
-            print(cosx.shape)
-            print(cosx)
 
-            yb,rhosb = np.meshgrid(y,rhos)
-
-            y = yb+rhosb
-            print('y+theta')
-            print(y.shape)
-            print(y)
-
-            print('Mt2n')
-            print(Mt2n.shape)
-            print(Mt2n)
             y2n,Mt2n = np.meshgrid(y,Mt2n)
-            print('y2n')
-            print(y2n.shape)
-            print(y2n)
-            print('Mt2n')
-            print(Mt2n.shape)
-            print(Mt2n)
+            y2n1,Mt2n1 = np.meshgrid(y,Mt2n1)
+            y1 = y2n-Mt2n
+            y2 = y2n1-Mt2n1
+            Ytheta1 = np.zeros((theta.shape[0],y1.shape[0],y1.shape[1]))
+            Ytheta2 = np.zeros((theta.shape[0],y2.shape[0],y2.shape[1]))
+            Ytheta1[:,:] = y1
+            Ytheta2[:,:] = y2
+            Y1b = Ytheta1.transpose(1,2,0)
+            Y2b = Ytheta2.transpose(1,2,0)
+            Ytheta1 = np.sin((Y1b-rhos).transpose(2,0,1))
+            Ytheta2 = np.sin((Y2b-rhos).transpose(2,0,1))
 
-            y = y2n-Mt2n
-            print('y+theta-nt')
-            print(y.shape)
-            print(y)
+            da2ndy = -(self.a2n)*A*np.mean(cosx*np.sum(np.sin((Y1b-rhos).transpose(2,0,1)),axis=1))
+            da2ndx = -(self.a2n)*A*np.mean(sinx*np.sum(np.cos((Y1b-rhos).transpose(2,0,1)),axis=1))
 
-            da2ndy = -(self.a2n)*A*np.mean(cosx*np.transpose(np.sin(y)))
-            print(da2ndy.shape)
-            print(da2ndy)
-            da2ndx = -(self.a2n)*A*sinx*(np.sum(np.cos(y2n-Mt2n),axis=0))
-
-            da2n1dy = self.a2n1*A*sinx*(np.sum(np.cos(y2n1-Mt2n1),axis=0))
-            da2n1dx = self.a2n1*A*cosx*(np.sum(np.sin(y2n1-Mt2n1),axis=0))
+            da2n1dy = self.a2n1*A*np.mean(cosx*np.sum(np.sin((Y2b-rhos).transpose(2,0,1)),axis=1))
+            da2n1dx = self.a2n1*A*np.mean(sinx*np.sum(np.cos((Y2b-rhos).transpose(2,0,1)),axis=1))
 
         return (da2ndy+da2n1dy),(da2ndx+da2n1dx)
 
     def modelx(self,t,X):
-        """
-    	x,y = X
-    	dy = self.dy
-    	dx = self.dx
-        """
-
         x = X[:self.nbp]
         y = X[self.nbp:]
         dXdt = np.zeros(2*self.nbp)
@@ -227,16 +178,6 @@ class Hamilton:
 
         return dXdt
 
-    """
-	def fluctualpotential(phi,av):
-		return phi-av
-
-	def average():
-
-		theta = np.arc
-		av = 1/(2*np.pi)
-		return av
-    """
     def dynamicsb(self):
 
     	#phi = potential(self.nbx,self.nby,self.Nx,self.Ny)
@@ -252,9 +193,6 @@ class Hamilton:
         X0b = np.zeros(2*self.nbp)
         X0b[:self.nbp] = xb[:,0]
         X0b[self.nbp:] = yb[:,0]
-
-        print(self.choixInt)
-
         #t = np.linspace(0,self.T,2*np.pi*int(self.T/self.dt))
         if self.choixInt==0:
             t = 2*np.pi*np.arange(self.T)
@@ -294,23 +232,8 @@ class Hamilton:
             x=np.transpose(x)
             y=np.transpose(y)
 
-        #x = s[:self.nbp,0:int(self.T/self.dt):int(2*np.pi)]
-        #print(x.shape)
-        #y = s[self.nbp:,0:int(self.T/self.dt):int(2*np.pi)]
-        #x=np.transpose(x)
-        #print(x.shape)
-        #y=np.transpose(y)
-
         """
-        bahx = []
-        bahxb =[]
-
         for i in range(1000):
-        #self.x.append(self.x[i]-phi[x[i],y[i+1]]-phi[x[i],y[i]])
-            #bahx.append((self.potential(x[i],y[i]+dy)-self.potential(x[i],y[i]-dy))/(2*dy))
-            #bahxb.append(np.pi*self.A*(np.sin(self.xnm)-np.sin(self.xnp)))
-            #x.append(x[i]-(self.potential(x[i],y[i]+dy)-self.potential(x[i],y[i]-dy))/(2*dy))
-            #y.append(y[i]+(self.potential(x[i]+dx,y[i])-self.potential(x[i]-dx,y[i]))/(2*dx))
             if self.rho ==0:
                 self.xnp = self.xnp + np.pi*self.A*((np.cos(self.xnm+dx)-np.cos(self.xnm-dx))/(2*dx)-(np.cos(self.xnm-dy)-np.cos(self.xnm+dy))/(2*dy))
                 self.xnm = self.xnm - np.pi*self.A*((np.cos(self.xnp+dx)-np.cos(self.xnp-dx))/(2*dx)+(np.cos(self.xnp+dy)-np.cos(self.xnp-dy))/(2*dy))
@@ -326,11 +249,6 @@ class Hamilton:
         return x,y
 
     def dynamics(self):
-        """
-		self.xnp = self.xnp - 2*np.pi*A*spc.jv(np.sqrt(2)*rho)*np.sin(xnm)	#(x+y+rho)
-		self.xnm = self.xnm + 2*np.pi*A*spc.jv(np.sqrt(2)*rho)*np.sin(xnp)	#(x-y+rho)
-         """
-        bahx = []
         for i in range(int(self.T/self.dt)):
             if self.rho==0:
             	self.xnp = self.xnp - 2*np.pi*self.A*np.sin(self.xnm)	#(x+y)
@@ -339,10 +257,8 @@ class Hamilton:
             	self.xnp = self.xnp - 2*np.pi*self.A*spc.jv(0,self.rho*np.sqrt(2))*np.sin(self.xnm)	#(x+y)
             	self.xnm = self.xnm + 2*np.pi*self.A*spc.jv(0,self.rho*np.sqrt(2))*np.sin(self.xnp)	#(x-y)
 
-            bahx.append(np.pi*self.A*np.sin(self.xnm))
-
             self.x.append((self.xnp + self.xnm)/2)
             self.y.append((self.xnp - self.xnm)/2)
 
-        return(self.x,self.y,bahx)
+        return(self.x,self.y)
 
