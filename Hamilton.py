@@ -18,7 +18,7 @@ class Hamilton:
         - k
         - phi1
     """
-    def __init__(self,B,A,rho,nbp,M,x0,y0,dx,dy,T,dt):
+    def __init__(self,B,A,rho,nbp,M,x0,y0,dx,dy,T,dt,choixInt):
         # PARSING INPUTS 
         self.B = B 			# champ magnétique B
         self.A = A 			# amplitude Phi
@@ -42,21 +42,25 @@ class Hamilton:
         self.dt = dt			# Nombre iteration dans le temps
         self.dx = dx		# taille maille x
         self.dy = dy 		# taille maille y 
+        self.choixInt = choixInt
         self.xnp = x0+y0
         self.xnm = x0-y0
-        self.i = 0
+        self.wc = 15*self.B
+
         if (self.M%2)==0:
             self.Mt2n = np.linspace(-self.M,self.M,(2*self.M+1))
             self.Mt2n1 = np.linspace(-self.M+1,self.M-1,(self.M))
 
-            self.a2n = self.M+1
-            self.a2n1 = self.M
+            #self.a2n = self.M+1
+            #self.a2n1 = self.M
         else:
             self.Mt2n = np.linspace(-self.M+1,self.M-1,(self.M))
             self.Mt2n1 = np.linspace(-self.M,self.M,(self.M+1))
 
-            self.a2n = self.M
-            self.a2n1 = self.M+1
+            #self.a2n = self.M
+            #self.a2n1 = self.M+1
+        self.a2n = 2*np.pi
+        self.a2n1 = 2*np.pi
 
 
     def parameters(self,B,x0,yo,A):
@@ -67,6 +71,28 @@ class Hamilton:
     	self.xnp = [x0+y0]
     	self.xnm = [x0-y0]
 
+    def rungekuttasimpson(self,model,u0,Tf,dt):
+        u = np.zeros((2*self.nbp,int(Tf/dt)+1))
+        u[:,0] = u0
+        for i in tqdm(range(int(Tf/dt))):
+            du0 = dt*model(dt*i,u[:,i])
+            du1 = dt*model(dt*i,u[:,i]+du0/3)
+            du2 = dt*model(dt*i,u[:,i]-du0/3)
+            du3 = dt*model(dt*i,u[:,i]+du0-du1+du2)
+            u[:,i+1] = u[:,i] + (du0+3*du1+3*du2+du3)/8
+        return u
+
+    def leapfrog(self,model,u0,v0,Tf,dt):
+        u = np.zeros((2*self.nbp,int(Tf/dt)+1))
+        v = np.zeros((2*self.nbp,int(Tf/dt)+1))
+        u[:,0]=u0
+        v[:,0]=v0[:,0]
+        for i in tqdm(range(int(Tf/dt))):
+    	    a = model(dt*i,u[:,i])
+    	    v[:self.nbp,i+1] = v[:self.nbp,i] + self.wc*a[self.nbp:]
+    	    v[self.nbp:,i+1] = v[self.nbp:,i] - self.wc*a[:self.nbp]
+    	    u[:,i+1] = u[:,i] + v[:,i]*dt
+        return u
     
     def potential(self,x,y,t):
 		#A = self.k**2/self.w0*self.phi1/self.B
@@ -145,8 +171,40 @@ class Hamilton:
 
             cosx = np.cos(xb + rhocb)
             sinx = np.sin(xb + rhocb)
+            print('cos(x+theta)')
+            print(cosx.shape)
+            print(cosx)
 
             yb,rhosb = np.meshgrid(y,rhos)
+
+            y = yb+rhosb
+            print('y+theta')
+            print(y.shape)
+            print(y)
+
+            print('Mt2n')
+            print(Mt2n.shape)
+            print(Mt2n)
+            y2n,Mt2n = np.meshgrid(y,Mt2n)
+            print('y2n')
+            print(y2n.shape)
+            print(y2n)
+            print('Mt2n')
+            print(Mt2n.shape)
+            print(Mt2n)
+
+            y = y2n-Mt2n
+            print('y+theta-nt')
+            print(y.shape)
+            print(y)
+
+            da2ndy = -(self.a2n)*A*np.mean(cosx*np.transpose(np.sin(y)))
+            print(da2ndy.shape)
+            print(da2ndy)
+            da2ndx = -(self.a2n)*A*sinx*(np.sum(np.cos(y2n-Mt2n),axis=0))
+
+            da2n1dy = self.a2n1*A*sinx*(np.sum(np.cos(y2n1-Mt2n1),axis=0))
+            da2n1dx = self.a2n1*A*cosx*(np.sum(np.sin(y2n1-Mt2n1),axis=0))
 
         return (da2ndy+da2n1dy),(da2ndx+da2n1dx)
 
@@ -156,19 +214,16 @@ class Hamilton:
     	dy = self.dy
     	dx = self.dx
         """
-        self.i+=1
 
         x = X[:self.nbp]
         y = X[self.nbp:]
         dXdt = np.zeros(2*self.nbp)
 
-
+        dXdtb = self.potentialb(x,y,t)
     	#dXdt = [-(self.potential(x,y+dy,t)-self.potential(x,y-dy,t)/(2*dy)),(self.potential(x+dx,y,t)-self.potential(x-dx,y,t)/(2*dx))]
     	#dXdt = [-self.potential(x,y,t)[1],self.potential(x,y,t)[2]]
-        dXdt[:self.nbp] = -self.potentialb(x,y,t)[0]
-        dXdt[self.nbp:] = self.potentialb(x,y,t)[1]
-
-        print(self.i)
+        dXdt[:self.nbp] = -dXdtb[0]
+        dXdt[self.nbp:] = dXdtb[1]
 
         return dXdt
 
@@ -198,13 +253,53 @@ class Hamilton:
         X0b[:self.nbp] = xb[:,0]
         X0b[self.nbp:] = yb[:,0]
 
+        print(self.choixInt)
+
         #t = np.linspace(0,self.T,2*np.pi*int(self.T/self.dt))
-        t = 2*np.pi*np.arange(500)
+        if self.choixInt==0:
+            t = 2*np.pi*np.arange(self.T)
 
-        s = solve_ivp(self.modelx,(0,2*np.pi*500),X0b,t_eval=t,atol=10**(-6),rtol=10**(-6))
+            s = odeint(self.modelx,X0b,t,atol=10**(-6),rtol=10**(-6))
 
-        x = s.y[:self.nbp,:]
-        y = s.y[self.nbp:,:]
+            x = s.y[:,:self.nbp]
+            y = s.y[:,self.nbp:]
+
+        elif self.choixInt==1:
+            t = 2*np.pi*np.arange(self.T)
+            #t = np.arange(self.T)
+
+            s = solve_ivp(self.modelx,(0,2*np.pi*self.T),X0b,t_eval=t,atol=10**(-6),rtol=10**(-6))
+
+            x = s.y[:self.nbp,:]
+            y = s.y[self.nbp:,:]
+            x=np.transpose(x)
+            y=np.transpose(y)
+
+        elif self.choixInt==2:
+            s = self.rungekuttasimpson(self.modelx,X0b,self.T,self.dt)
+
+            x = s[:self.nbp,0:int(self.T/self.dt):int(2*np.pi)]
+            y = s[self.nbp:,0:int(self.T/self.dt):int(2*np.pi)]
+            x=np.transpose(x)
+            y=np.transpose(y)
+
+        elif self.choixInt==3:
+            v0 = np.zeros(2*self.nbp)
+            v0 = np.random.rand(2*self.nbp,1)*2*np.pi
+
+            s = self.leapfrog(self.modelx,X0b,v0,self.T,self.dt)
+
+            x = s[:self.nbp,0:int(self.T/self.dt):int(2*np.pi)]
+            y = s[self.nbp:,0:int(self.T/self.dt):int(2*np.pi)]
+            x=np.transpose(x)
+            y=np.transpose(y)
+
+        #x = s[:self.nbp,0:int(self.T/self.dt):int(2*np.pi)]
+        #print(x.shape)
+        #y = s[self.nbp:,0:int(self.T/self.dt):int(2*np.pi)]
+        #x=np.transpose(x)
+        #print(x.shape)
+        #y=np.transpose(y)
 
         """
         bahx = []

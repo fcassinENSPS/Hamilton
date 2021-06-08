@@ -23,7 +23,7 @@ def recupHamilton():
 	"""
 	x0 = 0
 	y0 = 0
-	h = Hamilton(float(entrB.get()),float(entrA.get()),float(entrrho.get()),int(entrnb.get()),int(entrM.get()),x0,y0,float(entrdx.get()),float(entrdy.get()),float(entrT.get()),float(entrdt.get()))
+	h = Hamilton(float(entrB.get()),float(entrA.get()),float(entrrho.get()),int(entrnb.get()),int(entrM.get()),x0,y0,float(entrdx.get()),float(entrdy.get()),float(entrT.get()),float(entrdt.get()),choixInt.get())
 	x,y = h.dynamicsb()
 	#plt.plot(x,y,'.')
 	plt.plot(np.mod(x,2*np.pi),np.mod(y,2*np.pi),'.')
@@ -86,6 +86,18 @@ entrT.grid(row = 5, column = 1)
 entrdt.grid(row = 6, column = 1)
 entrdx.grid(row = 7, column = 1)
 entrdy.grid(row = 8, column = 1)
+
+choixInt = IntVar()
+choixInt.set(1)
+Label(fen1, text = 'Methode integration').grid(row = 0, column = 2, padx = 2, pady = 2, columnspan = 2)
+odeint = Radiobutton(fen1, text = 'odeint', variable = choixInt, value=0)
+solve_ivp = Radiobutton(fen1, text = 'solve_ivp', variable = choixInt, value = 1)
+runge = Radiobutton(fen1, text = 'runge-kutta ordre 4', variable = choixInt, value=2)
+leap = Radiobutton(fen1, text = 'leap-frog', variable = choixInt, value = 3)
+odeint.grid(row = 1, column = 2, padx = 2, pady = 5)
+solve_ivp.grid(row = 2, column = 2, padx = 5, pady = 5)
+runge.grid(row = 3, column = 2, padx = 2, pady = 5)
+leap.grid(row = 4, column = 2, padx = 5, pady = 5)
 
 bouton = Button(fen1, text ='Lancer simulation', command=recupHamilton)
 bouton.grid(row = 9, columnspan = 2)
