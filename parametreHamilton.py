@@ -21,15 +21,11 @@ def recupHamilton():
 		plt.plot(np.mod(x,2*np.pi),np.mod(y,2*np.pi),'.')
 		#plt.plot(b)
 	"""
-	x0 = 0
-	y0 = 0
-	h = Hamilton(float(entrB.get()),float(entrA.get()),float(entrrho.get()),int(entrnb.get()),int(entrM.get()),x0,y0,float(entrdx.get()),float(entrdy.get()),float(entrT.get()),float(entrdt.get()),choixInt.get())
+	h = Hamilton(float(entrB.get()),float(entrA.get()),float(entrrho.get()),int(entrnb.get()),int(entrM.get()),float(entrdx.get()),float(entrdy.get()),float(entrT.get()),float(entrdt.get()),choixInt.get())
 	x,y = h.dynamicsb()
 	#plt.plot(x,y,'.')
 	plt.plot(np.mod(x,2*np.pi),np.mod(y,2*np.pi),'.')
-	#plt.xlim(-4,4)
-	#plt.ylim(0,8)
-	plt.title("A = " + entrA.get() + " , rho = " + entrrho.get() )
+	plt.title("A = " + entrA.get() + " , rho = " + entrrho.get() + " , M = " + entrM.get() )
 	plt.xlabel("x")
 	plt.ylabel("y")
 	plt.show()
@@ -37,10 +33,6 @@ def recupHamilton():
 fen1 = Tk()
 
 Label(fen1, text = 'B').grid(padx = 5, pady = 2, sticky =E)
-"""
-Label(fen1, text = 'x0 :').grid(padx = 2, pady = 2, sticky =E)
-Label(fen1, text = 'y0 :').grid(padx = 2, pady = 5, sticky =E)
-"""
 Label(fen1, text = "nb particule test :").grid(padx = 2, pady = 5, sticky =E)
 Label(fen1, text = 'A :').grid(padx = 2, pady = 5, sticky =E)
 Label(fen1, text = 'rho :').grid(padx = 2, pady = 5, sticky =E)
@@ -51,12 +43,6 @@ Label(fen1, text = 'dx :').grid(padx = 2, pady = 5, sticky =E)
 Label(fen1, text = 'dy :').grid(padx = 2, pady = 5, sticky =E)
 entrB = Entry(fen1)
 entrB.insert(0,'1')
-"""
-entrx0 = Entry(fen1)
-entrx0.insert(0,'0.1')
-entry0 = Entry(fen1)
-entry0.insert(0,'3')
-"""
 entrnb = Entry(fen1)
 entrnb.insert(0,'1')
 entrA = Entry(fen1)
@@ -74,10 +60,6 @@ entrdx.insert(0,'0.00001')
 entrdy = Entry(fen1)
 entrdy.insert(0,'0.00001')
 entrB.grid(row = 0, column = 1)
-"""
-entrx0.grid(row = 1, column = 1)
-entry0.grid(row = 2, column = 1)
-"""
 entrnb.grid(row = 1, column = 1)
 entrA.grid(row = 2, column = 1)
 entrrho.grid(row = 3, column = 1)
