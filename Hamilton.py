@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.fft as fft
 import scipy as sp
-from scipy.integrate import odeint,solve_ivp
+from scipy.integrate import odeint,solve_ivp,RK45
 import scipy.special as spc
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -17,37 +17,30 @@ class Hamilton:
         - k
         - phi1
     """
-    def __init__(self,B,A,rho,nbp,M,x0,y0,dx,dy,T,dt,choixInt):
+    def __init__(self,B,A,rho,nbp,M,dx,dy,T,dt,choixInt):
         # PARSING INPUTS 
         self.B = B 			# champ magnétique B
         self.A = A 			# amplitude Phi
         self.rho = rho 		# rayon Larmor
         self.nbp = nbp		# nombres particules
         self.M = M 			# nombre de mode champ electrostatique
-        self.x = [x0,x0] 		# liste position particule dans le temps en x
+        self.x = 0 		# liste position particule dans le temps en x
         self.xb = np.zeros((nbp,500))
         self.xb[:] = np.random.rand(nbp,1)*2*np.pi
-        #a = np.arange(500)
-        #xb = np.linspace(0,nbp+1,num=nbp)/nbp*2*np.pi
-        #xb,ax = np.meshgrid(xb,a)
-        #self.xb = np.transpose(xb) 
-        self.y = [y0,y0] 		# liste position particule dans le temps en y
+        self.y = 0		# liste position particule dans le temps en y
         self.yb = np.zeros((nbp,500))
         self.yb[:] = np.random.rand(nbp,1)*2*np.pi
-        #yb = np.linspace(1,nbp+1.5,num=nbp)/nbp*2*np.pi
-        #yb,ax = np.meshgrid(yb,a)
-        #self.yb = np.transpose(yb)
         self.T = T 				# Temps final
         self.dt = dt			# Nombre iteration dans le temps
         self.dx = dx		# taille maille x
         self.dy = dy 		# taille maille y 
         self.choixInt = choixInt
-        self.xnp = x0+y0
-        self.xnm = x0-y0
+        #self.xnp = x0+y0
+        #self.xnm = x0-y0
         self.wc = 15*self.B
 
         if (self.M%2)==0:
-            self.Mt2n = np.linspace(-self.M,self.M,(2*self.M+1))
+            self.Mt2n = np.linspace(-self.M,self.M,(self.M+1))
             self.Mt2n1 = np.linspace(-self.M+1,self.M-1,(self.M))
 
             #self.a2n = self.M+1
@@ -74,11 +67,22 @@ class Hamilton:
         u = np.zeros((2*self.nbp,int(Tf/dt)+1))
         u[:,0] = u0
         for i in tqdm(range(int(Tf/dt))):
-            du0 = dt*model(dt*i,u[:,i])
-            du1 = dt*model(dt*i,u[:,i]+du0/3)
-            du2 = dt*model(dt*i,u[:,i]-du0/3)
-            du3 = dt*model(dt*i,u[:,i]+du0-du1+du2)
-            u[:,i+1] = u[:,i] + (du0+3*du1+3*du2+du3)/8
+            
+            du0 = model(dt*i,u[:,i])
+            du1 = model(dt*(i+1/2),u[:,i]+dt*du0/2)
+            du2 = model(dt*(i+1/2),u[:,i]+dt*du1/2)
+            du3 = model(dt*(i+1),u[:,i]+dt*du2)
+            u[:,i+1] = u[:,i] + dt*(du0+2*du1+2*du2+du3)/6
+            """
+            du0 = dt*model(dt*i*2*np.pi,u[:,i])
+            du1 = dt*model(dt*(i+1/4)*2*np.pi,u[:,i]+du0/4)
+            du2 = dt*model(dt*(i+3/8)*2*np.pi,u[:,i]+du0*3/32+9/32*du1)
+            du3 = dt*model(dt*(i+12/13)*2*np.pi,u[:,i]+1932/2197*du0-7200/2197*du1+7296/2197*du2)
+            du4 = dt*model(dt*(i+1)*2*np.pi,u[:,i]+439/216*du0-8*du1+3680/513*du2-845/4104*du3)
+            #du5 = dt*model(dt*(i+1/2),u[:,i]-8/27*du0+2*du1-3544/2565*du2+1859/4104*du3-11/40*du4)
+            u[:,i+1] = u[:,i] + 25/216*du0 + 1408/2565*du2 +2197/4101*du3-1/5*du4
+            #u[:,i+1] = u[:,i] + 16/135*du0 + 6656/12.825*du2 +28.561/56.430*du3-9/50*du4+2/55*du5
+            """
         return u
 
     def leapfrog(self,model,u0,v0,Tf,dt):
@@ -118,6 +122,7 @@ class Hamilton:
 
     def potentialb(self,x,y,t):
         A = self.A
+        #print(t)
 
         Mt2n = self.Mt2n*t
         Mt2n1 = self.Mt2n1*t
@@ -154,14 +159,18 @@ class Hamilton:
             Ytheta2[:,:] = y2
             Y1b = Ytheta1.transpose(1,2,0)
             Y2b = Ytheta2.transpose(1,2,0)
+            #print(Y1b.shape)
             Ytheta1 = np.sin((Y1b-rhos).transpose(2,0,1))
             Ytheta2 = np.sin((Y2b-rhos).transpose(2,0,1))
+            #print(Ytheta1.shape)
 
-            da2ndy = -(self.a2n)*A*np.mean(cosx*np.sum(np.sin((Y1b-rhos).transpose(2,0,1)),axis=1))
-            da2ndx = -(self.a2n)*A*np.mean(sinx*np.sum(np.cos((Y1b-rhos).transpose(2,0,1)),axis=1))
+            #print(np.mean(cosx*np.sum(np.sin((Y1b-rhos).transpose(2,0,1)),axis=1)).shape)
 
-            da2n1dy = self.a2n1*A*np.mean(cosx*np.sum(np.sin((Y2b-rhos).transpose(2,0,1)),axis=1))
-            da2n1dx = self.a2n1*A*np.mean(sinx*np.sum(np.cos((Y2b-rhos).transpose(2,0,1)),axis=1))
+            da2ndy = -(self.a2n)*A*np.mean(cosx*np.sum(np.sin((Y1b-rhos).transpose(2,0,1)),axis=1),axis=0)
+            da2ndx = -(self.a2n)*A*np.mean(sinx*np.sum(np.cos((Y1b-rhos).transpose(2,0,1)),axis=1),axis=0)
+
+            da2n1dy = self.a2n1*A*np.mean(cosx*np.sum(np.sin((Y2b-rhos).transpose(2,0,1)),axis=1),axis=0)
+            da2n1dx = self.a2n1*A*np.mean(sinx*np.sum(np.cos((Y2b-rhos).transpose(2,0,1)),axis=1),axis=0)
 
         return (da2ndy+da2n1dy),(da2ndx+da2n1dx)
 
@@ -180,8 +189,6 @@ class Hamilton:
 
     def dynamicsb(self):
 
-    	#phi = potential(self.nbx,self.nby,self.Nx,self.Ny)
-        #self.dt = 2*np.pi
         x = self.x
         y = self.y
         xb = self.xb
@@ -189,11 +196,10 @@ class Hamilton:
         dx = self.dx
         dy = self.dy
 
-        X0 = [x[0],y[0]]
+        #X0 = [x[0],y[0]]
         X0b = np.zeros(2*self.nbp)
         X0b[:self.nbp] = xb[:,0]
         X0b[self.nbp:] = yb[:,0]
-        #t = np.linspace(0,self.T,2*np.pi*int(self.T/self.dt))
         if self.choixInt==0:
             t = 2*np.pi*np.arange(self.T)
 
@@ -203,10 +209,9 @@ class Hamilton:
             y = s.y[:,self.nbp:]
 
         elif self.choixInt==1:
-            t = 2*np.pi*np.arange(self.T)
-            #t = np.arange(self.T)
+            t = 2*np.pi*np.arange(int(self.T))
 
-            s = solve_ivp(self.modelx,(0,2*np.pi*self.T),X0b,t_eval=t,atol=10**(-6),rtol=10**(-6))
+            s = solve_ivp(self.modelx,(0,2*np.pi*int(self.T)),X0b,t_eval=t,atol=10**(-6),rtol=10**(-6))
 
             x = s.y[:self.nbp,:]
             y = s.y[self.nbp:,:]
@@ -231,20 +236,6 @@ class Hamilton:
             y = s[self.nbp:,0:int(self.T/self.dt):int(2*np.pi)]
             x=np.transpose(x)
             y=np.transpose(y)
-
-        """
-        for i in range(1000):
-            if self.rho ==0:
-                self.xnp = self.xnp + np.pi*self.A*((np.cos(self.xnm+dx)-np.cos(self.xnm-dx))/(2*dx)-(np.cos(self.xnm-dy)-np.cos(self.xnm+dy))/(2*dy))
-                self.xnm = self.xnm - np.pi*self.A*((np.cos(self.xnp+dx)-np.cos(self.xnp-dx))/(2*dx)+(np.cos(self.xnp+dy)-np.cos(self.xnp-dy))/(2*dy))
-            else:
-                self.xnp = self.xnp + np.pi*self.A*spc.jv(0,self.rho*np.sqrt(2))*((np.cos(self.xnm+dx)-np.cos(self.xnm-dx))/(2*dx)-(np.cos(self.xnm-dy)-np.cos(self.xnm+dy))/(2*dy))
-                self.xnm = self.xnm - np.pi*self.A*spc.jv(0,self.rho*np.sqrt(2))*((np.cos(self.xnp+dx)-np.cos(self.xnp-dx))/(2*dx)+(np.cos(self.xnp+dy)-np.cos(self.xnp-dy))/(2*dy))
-            x.append((self.xnp+self.xnm)/2)
-            y.append((self.xnp-self.xnm)/2)
-        """
-
-
 
         return x,y
 
