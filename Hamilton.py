@@ -17,7 +17,7 @@ class Hamilton:
         - k
         - phi1
     """
-    def __init__(self,B,A,rho,nbp,M,dx,dy,T,dt,choixInt):
+    def __init__(self,B,A,rho,nbp,M,dx,dy,T,dt,choixInt,ntheta):
         # PARSING INPUTS 
         self.B = B 			# champ magnétique B
         self.A = A 			# amplitude Phi
@@ -35,6 +35,10 @@ class Hamilton:
         self.dx = dx		# taille maille x
         self.dy = dy 		# taille maille y 
         self.choixInt = choixInt
+        if rho != 0:
+            self.theta = np.linspace(0,2*np.pi,ntheta)
+            self.rhoc = self.rho*np.cos(self.theta)
+            self.rhos = self.rho*np.sin(self.theta)
         #self.xnp = x0+y0
         #self.xnm = x0-y0
         self.wc = 15*self.B
@@ -43,16 +47,16 @@ class Hamilton:
             self.Mt2n = np.linspace(-self.M,self.M,(self.M+1))
             self.Mt2n1 = np.linspace(-self.M+1,self.M-1,(self.M))
 
-            #self.a2n = self.M+1
-            #self.a2n1 = self.M
+            #self.a2n = 1/(self.M+1)
+            #self.a2n1 = 1/(self.M)
         else:
             self.Mt2n = np.linspace(-self.M+1,self.M-1,(self.M))
             self.Mt2n1 = np.linspace(-self.M,self.M,(self.M+1))
 
             #self.a2n = self.M
             #self.a2n1 = self.M+1
-        self.a2n = 2*np.pi
-        self.a2n1 = 2*np.pi
+        self.a2n = 2*np.pi*A
+        self.a2n1 = 2*np.pi*A
 
 
     def parameters(self,B,x0,yo,A):
@@ -134,17 +138,21 @@ class Hamilton:
             y2n,Mt2n = np.meshgrid(y,Mt2n)
             y2n1,Mt2n1 = np.meshgrid(y,Mt2n1)
 
-            da2ndy = -(self.a2n)*A*cosx*(np.sum(np.sin(y2n-Mt2n),axis=0))
-            da2ndx = -(self.a2n)*A*sinx*(np.sum(np.cos(y2n-Mt2n),axis=0))
+            da2ndy = -self.a2n*A*cosx*(np.sum(np.sin(y2n-Mt2n),axis=0))
+            da2ndx = -self.a2n*A*sinx*(np.sum(np.cos(y2n-Mt2n),axis=0))
 
-            da2n1dy = self.a2n1*A*sinx*(np.sum(np.cos(y2n1-Mt2n1),axis=0))
-            da2n1dx = self.a2n1*A*cosx*(np.sum(np.sin(y2n1-Mt2n1),axis=0))
+            da2n1dy = self.a2n1*sinx*(np.sum(np.cos(y2n1-Mt2n1),axis=0))
+            da2n1dx = self.a2n1*cosx*(np.sum(np.sin(y2n1-Mt2n1),axis=0))
+
+            dphidy = (da2ndy+da2n1dy)
+            dphidx = (da2ndx+da2n1dx)
+
         else:
 
-            theta = np.linspace(0,2*np.pi,10)
-            rhoc = self.rho*np.cos(theta)
-            rhos = self.rho*np.sin(theta)
-            xb,rhocb = np.meshgrid(x,rhoc)
+            #theta = self.theta
+            #rhoc = self.rhoc
+            #rhos = self.rhos
+            xb,rhocb = np.meshgrid(x,self.rhoc)
 
             cosx = np.cos(xb + rhocb)
             sinx = np.sin(xb + rhocb)
@@ -153,26 +161,26 @@ class Hamilton:
             y2n1,Mt2n1 = np.meshgrid(y,Mt2n1)
             y1 = y2n-Mt2n
             y2 = y2n1-Mt2n1
-            Ytheta1 = np.zeros((theta.shape[0],y1.shape[0],y1.shape[1]))
-            Ytheta2 = np.zeros((theta.shape[0],y2.shape[0],y2.shape[1]))
+            Ytheta1 = np.zeros((self.theta.shape[0],y1.shape[0],y1.shape[1]))
+            Ytheta2 = np.zeros((self.theta.shape[0],y2.shape[0],y2.shape[1]))
             Ytheta1[:,:] = y1
             Ytheta2[:,:] = y2
             Y1b = Ytheta1.transpose(1,2,0)
             Y2b = Ytheta2.transpose(1,2,0)
-            #print(Y1b.shape)
-            Ytheta1 = np.sin((Y1b-rhos).transpose(2,0,1))
-            Ytheta2 = np.sin((Y2b-rhos).transpose(2,0,1))
-            #print(Ytheta1.shape)
 
-            #print(np.mean(cosx*np.sum(np.sin((Y1b-rhos).transpose(2,0,1)),axis=1)).shape)
+            #Ytheta1 = np.sin((Y1b-rhos).transpose(2,0,1))
+            #Ytheta2 = np.sin((Y2b-rhos).transpose(2,0,1))
 
-            da2ndy = -(self.a2n)*A*np.mean(cosx*np.sum(np.sin((Y1b-rhos).transpose(2,0,1)),axis=1),axis=0)
-            da2ndx = -(self.a2n)*A*np.mean(sinx*np.sum(np.cos((Y1b-rhos).transpose(2,0,1)),axis=1),axis=0)
+            da2ndy = -(self.a2n)*np.mean(cosx*np.sum(np.sin((Y1b-self.rhos).transpose(2,0,1)),axis=1),axis=0)
+            da2ndx = -(self.a2n)*np.mean(sinx*np.sum(np.cos((Y1b-self.rhos).transpose(2,0,1)),axis=1),axis=0)
 
-            da2n1dy = self.a2n1*A*np.mean(cosx*np.sum(np.sin((Y2b-rhos).transpose(2,0,1)),axis=1),axis=0)
-            da2n1dx = self.a2n1*A*np.mean(sinx*np.sum(np.cos((Y2b-rhos).transpose(2,0,1)),axis=1),axis=0)
+            da2n1dy = self.a2n1*np.mean(sinx*np.sum(np.cos((Y2b-self.rhos).transpose(2,0,1)),axis=1),axis=0)
+            da2n1dx = self.a2n1*np.mean(cosx*np.sum(np.sin((Y2b-self.rhos).transpose(2,0,1)),axis=1),axis=0)
 
-        return (da2ndy+da2n1dy),(da2ndx+da2n1dx)
+            dphidy = (da2ndy+da2n1dy)
+            dphidx = (da2ndx+da2n1dx)
+
+        return dphidy,dphidx
 
     def modelx(self,t,X):
         x = X[:self.nbp]
@@ -203,10 +211,10 @@ class Hamilton:
         if self.choixInt==0:
             t = 2*np.pi*np.arange(self.T)
 
-            s = odeint(self.modelx,X0b,t,atol=10**(-6),rtol=10**(-6))
+            s = odeint(self.modelx,X0b,t,atol=10**(-6),rtol=10**(-6),tfirst=True)
 
-            x = s.y[:,:self.nbp]
-            y = s.y[:,self.nbp:]
+            x = s[:,:self.nbp]
+            y = s[:,self.nbp:]
 
         elif self.choixInt==1:
             t = 2*np.pi*np.arange(int(self.T))
@@ -219,10 +227,16 @@ class Hamilton:
             y=np.transpose(y)
 
         elif self.choixInt==2:
+            #n = int(2*np.pi/self.dt)
+            #N = int(self.T/(2*np.pi))
+            n = int(self.dt)
+            N = int(self.T)
+            self.dt = 2*np.pi/n
+            self.T = 2*np.pi*N
             s = self.rungekuttasimpson(self.modelx,X0b,self.T,self.dt)
 
-            x = s[:self.nbp,0:int(self.T/self.dt):int(2*np.pi)]
-            y = s[self.nbp:,0:int(self.T/self.dt):int(2*np.pi)]
+            x = s[:self.nbp,0:N*n:n]
+            y = s[self.nbp:,0:N*n:n]
             x=np.transpose(x)
             y=np.transpose(y)
 
