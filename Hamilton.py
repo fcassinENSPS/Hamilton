@@ -133,11 +133,11 @@ class Hamilton:
     """
 
     def potentialb0(self,x,y,t):
-        Mt2n = self.Mt2n*t
-        Mt2n1 = self.Mt2n1*t
+        #Mt2n = self.Mt2n*t
+        #Mt2n1 = self.Mt2n1*t
 
-        y2n,Mt2n = np.meshgrid(y,Mt2n)
-        y2n1,Mt2n1 = np.meshgrid(y,Mt2n1)
+        y2n,Mt2n = np.meshgrid(y,self.Mt2n*t)
+        y2n1,Mt2n1 = np.meshgrid(y,self.Mt2n1*t)
 
         cosx = np.cos(x)
         sinx = np.sin(x)
@@ -189,8 +189,10 @@ class Hamilton:
         #rhos = self.rhos
         xb,rhocb = np.meshgrid(x,self.rhoc)
 
-        cosx = np.cos(xb + rhocb)
-        sinx = np.sin(xb + rhocb)
+        xrho = xb + rhocb
+
+        cosx = np.cos(xrho)
+        sinx = np.sin(xrho)
 
         #y2n,Mt2n = np.meshgrid(y,Mt2n)
         #y2n1,Mt2n1 = np.meshgrid(y,Mt2n1)
@@ -200,8 +202,8 @@ class Hamilton:
         Ytheta2 = np.zeros((self.theta.shape[0],y2n1.shape[0],y2n1.shape[1]))
         Ytheta1[:,:] = y2n-Mt2n
         Ytheta2[:,:] = y2n1-Mt2n1
-        Y1b = Ytheta1.transpose(1,2,0)-self.rhos
-        Y2b = Ytheta2.transpose(1,2,0)-self.rhos
+        Y1b = (Ytheta1.transpose(1,2,0)-self.rhos).transpose(2,0,1)
+        Y2b = (Ytheta2.transpose(1,2,0)-self.rhos).transpose(2,0,1)
 
         """
             if self.choixOrdreGyro == 2:
@@ -218,11 +220,11 @@ class Hamilton:
         #Ytheta1 = np.sin((Y1b-rhos).transpose(2,0,1))
         #Ytheta2 = np.sin((Y2b-rhos).transpose(2,0,1))
 
-        da2ndy = -(self.a2n)*np.mean(cosx*np.sum(np.sin((Y1b).transpose(2,0,1)),axis=1),axis=0)
-        da2ndx = -(self.a2n)*np.mean(sinx*np.sum(np.cos((Y1b).transpose(2,0,1)),axis=1),axis=0)
+        da2ndy = -(self.a2n)*np.mean(cosx*np.sum(np.sin(Y1b),axis=1),axis=0)
+        da2ndx = -(self.a2n)*np.mean(sinx*np.sum(np.cos(Y1b),axis=1),axis=0)
 
-        da2n1dy = self.a2n1*np.mean(sinx*np.sum(np.cos((Y2b).transpose(2,0,1)),axis=1),axis=0)
-        da2n1dx = self.a2n1*np.mean(cosx*np.sum(np.sin((Y2b).transpose(2,0,1)),axis=1),axis=0)
+        da2n1dy = self.a2n1*np.mean(sinx*np.sum(np.cos(Y2b),axis=1),axis=0)
+        da2n1dx = self.a2n1*np.mean(cosx*np.sum(np.sin(Y2b),axis=1),axis=0)
 
         dphidy = (da2ndy+da2n1dy)
         dphidx = (da2ndx+da2n1dx)
@@ -230,16 +232,18 @@ class Hamilton:
         return dphidy,dphidx
 
     def potentialb2(self,x,y,t):
-        Mt2n = self.Mt2n*t
-        Mt2n1 = self.Mt2n1*t
+        #Mt2n = self.Mt2n*t
+        #Mt2n1 = self.Mt2n1*t
 
-        y2n,Mt2n = np.meshgrid(y,Mt2n)
-        y2n1,Mt2n1 = np.meshgrid(y,Mt2n1)
+        y2n,Mt2n = np.meshgrid(y,self.Mt2n*t)
+        y2n1,Mt2n1 = np.meshgrid(y,self.Mt2n1*t)
 
         xb,rhocb = np.meshgrid(x,self.rhoc)
 
-        cosx = np.cos(xb + rhocb)
-        sinx = np.sin(xb + rhocb)
+        xrho = xb + rhocb
+
+        cosx = np.cos(xrho)
+        sinx = np.sin(xrho)
         cos2x = cosx*cosx
         sin2x = sinx*sinx
         sincosx = cosx*sinx
@@ -248,13 +252,13 @@ class Hamilton:
         Ytheta2 = np.zeros((self.theta.shape[0],y2n1.shape[0],y2n1.shape[1]))
         Ytheta1[:,:] = y2n-Mt2n
         Ytheta2[:,:] = y2n1-Mt2n1
-        Y1b = Ytheta1.transpose(1,2,0)-self.rhos
-        Y2b = Ytheta2.transpose(1,2,0)-self.rhos
+        Y1b = (Ytheta1.transpose(1,2,0)-self.rhos).transpose(2,0,1)
+        Y2b = (Ytheta2.transpose(1,2,0)-self.rhos).transpose(2,0,1)
 
-        sumcos1b = np.sum(np.cos((Y1b).transpose(2,0,1)),axis=1)
-        sumsin1b = np.sum(np.sin((Y1b).transpose(2,0,1)),axis=1)
-        sumcos2b = np.sum(np.cos((Y2b).transpose(2,0,1)),axis=1)
-        sumsin2b = np.sum(np.sin((Y2b).transpose(2,0,1)),axis=1)
+        sumcos1b = np.sum(np.cos(Y1b),axis=1)
+        sumsin1b = np.sum(np.sin(Y1b),axis=1)
+        sumcos2b = np.sum(np.cos(Y2b),axis=1)
+        sumsin2b = np.sum(np.sin(Y2b),axis=1)
 
         da2ndy1 = -(self.a2n)*np.mean(cosx*sumsin1b,axis=0)
         da2ndx1 = -(self.a2n)*np.mean(sinx*sumcos1b,axis=0)
@@ -262,16 +266,16 @@ class Hamilton:
         da2n1dy1 = self.a2n1*np.mean(sinx*sumcos2b,axis=0)
         da2n1dx1 = self.a2n1*np.mean(cosx*sumsin2b,axis=0)
 
-        dgraddy2 = -2*sin2x*sumsin1b*sumcos1b - 2*sincosx*(sumcos1b*sumcos2b-sumsin1b*sumsin2b) + 2*cos2x*sumsin2b*sumcos2b
-        dgraddy2 += 2*cos2x*sumcos1b*sumsin1b + 2*sincosx*(sumcos1b*sumcos2b + sumsin1b*sumcos1b) - 2*sin2x*sumcos2b*sumsin2b
-        dgraddy2 = (self.a2n**2)*self.me*np.mean(dgraddy2,axis=0)
+        dgraddy2 = -2.*sin2x*sumsin1b*sumcos1b - 2.*sincosx*(sumcos1b*sumcos2b-sumsin1b*sumsin2b) + 2.*cos2x*sumsin2b*sumcos2b
+        dgraddy2 += 2.*cos2x*sumcos1b*sumsin1b + 2.*sincosx*(-sumcos1b*sumcos2b + sumsin1b*sumsin2b) - 2.*sin2x*sumcos2b*sumsin2b
+        dgraddy2b = (self.a2n**2)*self.me*np.mean(dgraddy2,axis=0)
 
-        dgraddx2 = (sincosx-cos2x)*2*sumcos1b + (sincosx+2*sin2x-cos2x)*sumcos1b*sumsin2b - 4*sincosx*sumsin2b
-        dgraddx2 -= 4*sincosx*sumsin1b - 4*(sin2x-cos2x)*sumsin1b*sumcos2b - 4*sincosx*sumcos2b 
-        dgraddx2 = (self.a2n**2)*self.me*np.mean(dgraddx2,axis=0)
+        dgraddx2 = (sincosx-cos2x)*sumcos1b*sumcos1b + (sincosx+2.*sin2x-cos2x)*sumcos1b*sumsin2b - 2.*sincosx*sumsin2b*sumsin2b
+        dgraddx2 -= 2.*sincosx*sumsin1b*sumsin1b - 2.*(sin2x-cos2x)*sumsin1b*sumcos2b - 2.*sincosx*sumcos2b*sumcos2b
+        dgraddx2b = (self.a2n**2)*self.me*np.mean(dgraddx2,axis=0)
 
-        dphidy = -(da2ndy1+da2n1dy1) + dgraddy2
-        dphidx = (da2ndx1+da2n1dx1) - dgraddx2
+        dphidy = -(da2ndy1+da2n1dy1) + dgraddy2b
+        dphidx = (da2ndx1+da2n1dx1) - dgraddx2b
 
         return dphidy,dphidx
 
