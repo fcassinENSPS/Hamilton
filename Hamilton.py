@@ -1,344 +1,153 @@
 import numpy as np
-import numpy.fft as fft
-import scipy as sp
-from scipy.integrate import odeint,solve_ivp,RK45
+#import scipy as sp
+from scipy.integrate import odeint,solve_ivp
 import scipy.special as spc
-import matplotlib.pyplot as plt
+from scipy.stats import linregress
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 class Hamilton:
-    """
-	Hamilton class gathering the potential calculation and particles dynamics
-    Inputs are:
-        - B magnetic field
-        - e sign charge
-        - eta 
-        - w0
-        - k
-        - phi1
-    """
-    def __init__(self,B,me,A,rho,nbp,M,dx,dy,T,dt,choixInt,choixOrdreGyro,choixOrdreFLR,ntheta):
+    def __init__(self,eta,A,rho,nbp,M,dx,dy,T,dt,choixInt,choixOrdreGyro,choixOrdreFLR,ntheta):
         # PARSING INPUTS 
-        self.B = B 			# champ magnétique B
-        self.A = A 			# amplitude Phi
+        #self.B = B 			# champ magnétique B
+        self.A = A
+        self.Ab = A*spc.jv(0,rho*np.sqrt(2))		# amplitude Phi modifier
         self.rho = rho 		# rayon Larmor
         self.nbp = nbp		# nombres particules
-        self.M = M 			# nombre de mode champ electrostatique
-        self.x = 0 		# liste position particule dans le temps en x
-        self.xb = np.zeros((nbp,500))
-        self.xb[:] = np.random.rand(nbp,1)*2*np.pi
-        self.y = 0		# liste position particule dans le temps en y
-        self.yb = np.zeros((nbp,500))
-        self.yb[:] = np.random.rand(nbp,1)*2*np.pi
+        #self.M = M 			# nombre de mode champ electrostatique
+        #self.x = 0 		# liste position particule dans le temps en x
+        self.x = np.zeros(nbp)
+        self.x[:] = np.random.rand(nbp)*2*np.pi
+        #self.y = 0		# liste position particule dans le temps en y
+        self.y = np.zeros(nbp)
+        self.y[:] = np.random.rand(nbp)*2*np.pi
         self.T = T 				# Temps final
         self.dt = dt			# Nombre iteration dans le temps
         self.dx = dx		# taille maille x
         self.dy = dy 		# taille maille y 
         self.choixInt = choixInt
         self.choixOrdreGyro = choixOrdreGyro
-        self.me = me
-        if rho != 0:
-            self.theta = np.linspace(0,2*np.pi,ntheta)
-            self.rhoc = self.rho*np.cos(self.theta)
-            self.rhos = self.rho*np.sin(self.theta)
-        #self.xnp = x0+y0
-        #self.xnm = x0-y0
-        self.wc = 15*self.B
+        self.eta = eta
+
+        if choixOrdreFLR == 2:
+        	self.Ab = A*(1-rho**2/2)
 
         if rho == 0:
         	self.choixOrdreGyro = 0
-
-        if choixOrdreFLR == 2:
-        	self.A = A*(1-rho**2/4)
-
-        if (self.M%2)==0:
-            self.Mt2n = np.linspace(-self.M,self.M,(self.M+1))
-            self.Mt2n1 = np.linspace(-self.M+1,self.M-1,(self.M))
-
-            #self.a2n = 1/(self.M+1)
-            #self.a2n1 = 1/(self.M)
+        if (M%2)==0:
+            self.M = M/2
         else:
-            self.Mt2n = np.linspace(-self.M+1,self.M-1,(self.M))
-            self.Mt2n1 = np.linspace(-self.M,self.M,(self.M+1))
+            self.M =(M-1)/2
 
-            #self.a2n = self.M
-            #self.a2n1 = self.M+1
-        self.a2n = 2*np.pi*self.A
-        self.a2n1 = 2*np.pi*self.A
-
-
-    def parameters(self,B,x0,yo,A):
-    	self.B = B
-    	self.A = A
-    	self.x = [x0]
-    	self.y = [yo]
-    	self.xnp = [x0+y0]
-    	self.xnm = [x0-y0]
-
-    def rungekuttasimpson(self,model,u0,Tf,dt):
+    def RungeKutta(self,Model,u0,Tf,dt):
         u = np.zeros((2*self.nbp,int(Tf/dt)+1))
         u[:,0] = u0
         for i in tqdm(range(int(Tf/dt))):
-            
-            du0 = model(dt*i,u[:,i])
-            du1 = model(dt*(i+1/2),u[:,i]+dt*du0/2)
-            du2 = model(dt*(i+1/2),u[:,i]+dt*du1/2)
-            du3 = model(dt*(i+1),u[:,i]+dt*du2)
+            du0 = Model(dt*i,u[:,i])
+            du1 = Model(dt*(i+1/2),u[:,i]+dt*du0/2)
+            du2 = Model(dt*(i+1/2),u[:,i]+dt*du1/2)
+            du3 = Model(dt*(i+1),u[:,i]+dt*du2)
             u[:,i+1] = u[:,i] + dt*(du0+2*du1+2*du2+du3)/6
-            """
-            du0 = dt*model(dt*i*2*np.pi,u[:,i])
-            du1 = dt*model(dt*(i+1/4)*2*np.pi,u[:,i]+du0/4)
-            du2 = dt*model(dt*(i+3/8)*2*np.pi,u[:,i]+du0*3/32+9/32*du1)
-            du3 = dt*model(dt*(i+12/13)*2*np.pi,u[:,i]+1932/2197*du0-7200/2197*du1+7296/2197*du2)
-            du4 = dt*model(dt*(i+1)*2*np.pi,u[:,i]+439/216*du0-8*du1+3680/513*du2-845/4104*du3)
-            #du5 = dt*model(dt*(i+1/2),u[:,i]-8/27*du0+2*du1-3544/2565*du2+1859/4104*du3-11/40*du4)
-            u[:,i+1] = u[:,i] + 25/216*du0 + 1408/2565*du2 +2197/4101*du3-1/5*du4
-            #u[:,i+1] = u[:,i] + 16/135*du0 + 6656/12.825*du2 +28.561/56.430*du3-9/50*du4+2/55*du5
-            """
         return u
 
-    def leapfrog(self,model,u0,v0,Tf,dt):
-        u = np.zeros((2*self.nbp,int(Tf/dt)+1))
-        v = np.zeros((2*self.nbp,int(Tf/dt)+1))
-        u[:,0]=u0
-        v[:,0]=v0[:,0]
-        for i in tqdm(range(int(Tf/dt))):
-    	    a = model(dt*i,u[:,i])
-    	    v[:self.nbp,i+1] = v[:self.nbp,i] + self.wc*a[self.nbp:]
-    	    v[self.nbp:,i+1] = v[self.nbp:,i] - self.wc*a[:self.nbp]
-    	    u[:,i+1] = u[:,i] + v[:,i]*dt
-        return u
-    
-    """
-    def potential(self,x,y,t):
-		#A = self.k**2/self.w0*self.phi1/self.B
-        A = self.A
-
-        phi = A*np.cos(x)*np.cos(y)
-        dphidy = -A*np.cos(x)*np.sin(y)
-        dphidx = -A*np.sin(x)*np.cos(y)
-        for i in range(self.M):
-        	if (i+1)%2 ==0:
-        		#phi += A*(np.cos(x)*np.cos(y-(i+1)*t)+np.cos(x)*np.cos(y+(i+1)*t))
-        		dphidy += -A*(np.cos(x)*np.sin(y-(i+1)*t)+np.cos(x)*np.sin(y+(i+1)*t))
-        		dphidx += -A*(np.sin(x)*np.cos(y-(i+1)*t)+np.sin(x)*np.cos(y+(i+1)*t))
-        		#phi += A*(np.cos(x)*np.cos(y-(i+1)*t))
-        	else:
-        		#phi += A*(np.cos(x+np.pi/2)*np.cos(y+np.pi/2-(i+1)*t)+np.cos(x+np.pi/2)*np.cos(y+np.pi/2+(i+1)*t))
-        		dphidy += -A*(np.cos(x+np.pi/2.0)*np.sin(y+np.pi/2.0-float((i+1))*t)+np.cos(x+np.pi/2.0)*np.sin(y+np.pi/2.0+float((i+1))*t))
-        		dphidx += -A*(np.sin(x+np.pi/2.0)*np.cos(y+np.pi/2.0-float((i+1))*t)+np.sin(x+np.pi/2.0)*np.cos(y+np.pi/2.0+float((i+1))*t))
-        		#phi += A*(np.cos(x+np.pi/2)*np.cos(y+np.pi/2-(i+1)*t))
-
-        return phi,dphidy,dphidx
-    """
-
-    def potentialb0(self,x,y,t):
-        #Mt2n = self.Mt2n*t
-        #Mt2n1 = self.Mt2n1*t
-
-        y2n,Mt2n = np.meshgrid(y,self.Mt2n*t)
-        y2n1,Mt2n1 = np.meshgrid(y,self.Mt2n1*t)
-
+    def Potential0(self,x,y,t):
         cosx = np.cos(x)
         sinx = np.sin(x)
+        cosy = np.cos(y)
+        siny = np.sin(y)
 
-        #y2n,Mt2n = np.meshgrid(y,Mt2n)
-        #y2n1,Mt2n1 = np.meshgrid(y,Mt2n1)
+        alpha = 1+2*np.cos((self.M+1)*t)*spc.eval_chebyu(self.M-1,np.cos(t))
+        beta =2*np.cos(self.M*t)*spc.eval_chebyu(self.M-1,np.cos(t))
 
-        da2ndy = -self.a2n*cosx*(np.sum(np.sin(y2n-Mt2n),axis=0))
-        da2ndx = -self.a2n*sinx*(np.sum(np.cos(y2n-Mt2n),axis=0))
-
-        da2n1dy = self.a2n1*sinx*(np.sum(np.cos(y2n1-Mt2n1),axis=0))
-        da2n1dx = self.a2n1*cosx*(np.sum(np.sin(y2n1-Mt2n1),axis=0))
-
-        dphidy = (da2ndy+da2n1dy)
-        dphidx = (da2ndx+da2n1dx)
+        dphidy = 2*np.pi*self.A*(beta*sinx*cosy-alpha*cosx*siny)
+        dphidx = 2*np.pi*self.A*(beta*cosx*siny-alpha*sinx*cosy)
 
         return dphidy,dphidx
 
-    def potentialb1(self,x,y,t):
-        A = self.A
-        #print(t)
+    def Potential1(self,x,y,t):
+        cosx = np.cos(x)
+        sinx = np.sin(x)
+        cosy = np.cos(y)
+        siny = np.sin(y)
 
-        Mt2n = self.Mt2n*t
-        Mt2n1 = self.Mt2n1*t
+        alpha = 1+2*np.cos((self.M+1)*t)*spc.eval_chebyu(self.M-1,np.cos(t))
+        beta =2*np.cos(self.M*t)*spc.eval_chebyu(self.M-1,np.cos(t))
 
-        y2n,Mt2n = np.meshgrid(y,Mt2n)
-        y2n1,Mt2n1 = np.meshgrid(y,Mt2n1)
-        """
-        if self.rho==0:
-            cosx = np.cos(x)
-            sinx = np.sin(x)
-
-            #y2n,Mt2n = np.meshgrid(y,Mt2n)
-            #y2n1,Mt2n1 = np.meshgrid(y,Mt2n1)
-
-            da2ndy = -self.a2n*cosx*(np.sum(np.sin(y2n-Mt2n),axis=0))
-            da2ndx = -self.a2n*sinx*(np.sum(np.cos(y2n-Mt2n),axis=0))
-
-            da2n1dy = self.a2n1*sinx*(np.sum(np.cos(y2n1-Mt2n1),axis=0))
-            da2n1dx = self.a2n1*cosx*(np.sum(np.sin(y2n1-Mt2n1),axis=0))
-
-            dphidy = (da2ndy+da2n1dy)
-            dphidx = (da2ndx+da2n1dx)
-
-        else:
-        """
-        #theta = self.theta
-        #rhoc = self.rhoc
-        #rhos = self.rhos
-        xb,rhocb = np.meshgrid(x,self.rhoc)
-
-        xrho = xb + rhocb
-
-        cosx = np.cos(xrho)
-        sinx = np.sin(xrho)
-
-        #y2n,Mt2n = np.meshgrid(y,Mt2n)
-        #y2n1,Mt2n1 = np.meshgrid(y,Mt2n1)
-        #y1 = y2n-Mt2n
-        #y2 = y2n1-Mt2n1
-        Ytheta1 = np.zeros((self.theta.shape[0],y2n.shape[0],y2n.shape[1]))
-        Ytheta2 = np.zeros((self.theta.shape[0],y2n1.shape[0],y2n1.shape[1]))
-        Ytheta1[:,:] = y2n-Mt2n
-        Ytheta2[:,:] = y2n1-Mt2n1
-        Y1b = (Ytheta1.transpose(1,2,0)-self.rhos).transpose(2,0,1)
-        Y2b = (Ytheta2.transpose(1,2,0)-self.rhos).transpose(2,0,1)
-
-        """
-            if self.choixOrdreGyro == 2:
-                cos2x = cosx*cosx
-                sin2x = sinx*sinx
-                sincosx = cosx*sinx
-
-                sumcos1b = np.sum(np.cos((Y1b).transpose(2,0,1)),axis=1)
-                sumsin1b = np.sum(np.sin((Y1b).transpose(2,0,1)),axis=1)
-                sumcos2b = np.sum(np.cos((Y2b).transpose(2,0,1)),axis=1)
-                sumsin2b = np.sum(np.sin((Y2b).transpose(2,0,1)),axis=1)
-        """
-
-        #Ytheta1 = np.sin((Y1b-rhos).transpose(2,0,1))
-        #Ytheta2 = np.sin((Y2b-rhos).transpose(2,0,1))
-
-        da2ndy = -(self.a2n)*np.mean(cosx*np.sum(np.sin(Y1b),axis=1),axis=0)
-        da2ndx = -(self.a2n)*np.mean(sinx*np.sum(np.cos(Y1b),axis=1),axis=0)
-
-        da2n1dy = self.a2n1*np.mean(sinx*np.sum(np.cos(Y2b),axis=1),axis=0)
-        da2n1dx = self.a2n1*np.mean(cosx*np.sum(np.sin(Y2b),axis=1),axis=0)
-
-        dphidy = (da2ndy+da2n1dy)
-        dphidx = (da2ndx+da2n1dx)
+        dphidy = 2*np.pi*self.Ab*(beta*sinx*cosy-alpha*cosx*siny)
+        dphidx = 2*np.pi*self.Ab*(beta*cosx*siny-alpha*sinx*cosy)
 
         return dphidy,dphidx
 
-    def potentialb2(self,x,y,t):
-        #Mt2n = self.Mt2n*t
-        #Mt2n1 = self.Mt2n1*t
+    def Potential2(self,x,y,t):
+        cosx = np.cos(x)
+        sinx = np.sin(x)
+        cosy = np.cos(y)
+        siny = np.sin(y)
 
-        y2n,Mt2n = np.meshgrid(y,self.Mt2n*t)
-        y2n1,Mt2n1 = np.meshgrid(y,self.Mt2n1*t)
+        alpha = 1+2*np.cos((self.M+1)*t)*spc.eval_chebyu(self.M-1,np.cos(t))
+        beta =2*np.cos(self.M*t)*spc.eval_chebyu(self.M-1,np.cos(t))
 
-        xb,rhocb = np.meshgrid(x,self.rhoc)
-
-        xrho = xb + rhocb
-
-        cosx = np.cos(xrho)
-        sinx = np.sin(xrho)
-        cos2x = cosx*cosx
-        sin2x = sinx*sinx
-        sincosx = cosx*sinx
-
-        Ytheta1 = np.zeros((self.theta.shape[0],y2n.shape[0],y2n.shape[1]))
-        Ytheta2 = np.zeros((self.theta.shape[0],y2n1.shape[0],y2n1.shape[1]))
-        Ytheta1[:,:] = y2n-Mt2n
-        Ytheta2[:,:] = y2n1-Mt2n1
-        Y1b = (Ytheta1.transpose(1,2,0)-self.rhos).transpose(2,0,1)
-        Y2b = (Ytheta2.transpose(1,2,0)-self.rhos).transpose(2,0,1)
-
-        sumcos1b = np.sum(np.cos(Y1b),axis=1)
-        sumsin1b = np.sum(np.sin(Y1b),axis=1)
-        sumcos2b = np.sum(np.cos(Y2b),axis=1)
-        sumsin2b = np.sum(np.sin(Y2b),axis=1)
-
-        da2ndy1 = -(self.a2n)*np.mean(cosx*sumsin1b,axis=0)
-        da2ndx1 = -(self.a2n)*np.mean(sinx*sumcos1b,axis=0)
-
-        da2n1dy1 = self.a2n1*np.mean(sinx*sumcos2b,axis=0)
-        da2n1dx1 = self.a2n1*np.mean(cosx*sumsin2b,axis=0)
-
-        dgraddy2 = -2.*sin2x*sumsin1b*sumcos1b - 2.*sincosx*(sumcos1b*sumcos2b-sumsin1b*sumsin2b) + 2.*cos2x*sumsin2b*sumcos2b
-        dgraddy2 += 2.*cos2x*sumcos1b*sumsin1b + 2.*sincosx*(-sumcos1b*sumcos2b + sumsin1b*sumsin2b) - 2.*sin2x*sumcos2b*sumsin2b
-        dgraddy2b = (self.a2n**2)*self.me*np.mean(dgraddy2,axis=0)
-
-        dgraddx2 = (sincosx-cos2x)*sumcos1b*sumcos1b + (sincosx+2.*sin2x-cos2x)*sumcos1b*sumsin2b - 2.*sincosx*sumsin2b*sumsin2b
-        dgraddx2 -= 2.*sincosx*sumsin1b*sumsin1b - 2.*(sin2x-cos2x)*sumsin1b*sumcos2b - 2.*sincosx*sumcos2b*sumcos2b
-        dgraddx2b = (self.a2n**2)*self.me*np.mean(dgraddx2,axis=0)
-
-        dphidy = -(da2ndy1+da2n1dy1) + dgraddy2b
-        dphidx = (da2ndx1+da2n1dx1) - dgraddx2b
+        dphidy = -2*np.pi*self.Ab*(beta*sinx*cosy-alpha*cosx*siny) + 2*self.A**2*self.eta*((alpha**2+beta**2)*np.cos(2*x)*siny*cosy-2*alpha*beta*sinx*cosx*np.cos(2*y))
+        dphidx = 2*np.pi*self.Ab*(beta*cosx*siny-alpha*sinx*cosy) - 2*self.A**2*self.eta*((alpha**2+beta**2)*np.cos(2*y)*sinx*cosx-2*alpha*beta*siny*cosy*np.cos(2*x))
 
         return dphidy,dphidx
 
-    def modelx0(self,t,X):
+    def Model0(self,t,X):
         x = X[:self.nbp]
         y = X[self.nbp:]
         dXdt = np.zeros(2*self.nbp)
 
-        dXdtb = self.potentialb0(x,y,t)
-    	#dXdt = [-(self.potential(x,y+dy,t)-self.potential(x,y-dy,t)/(2*dy)),(self.potential(x+dx,y,t)-self.potential(x-dx,y,t)/(2*dx))]
-    	#dXdt = [-self.potential(x,y,t)[1],self.potential(x,y,t)[2]]
+        dXdtb = self.Potential0(x,y,t)
         dXdt[:self.nbp] = -dXdtb[0]
         dXdt[self.nbp:] = dXdtb[1]
 
         return dXdt
 
-    def modelx1(self,t,X):
+    def Model1(self,t,X):
         x = X[:self.nbp]
         y = X[self.nbp:]
         dXdt = np.zeros(2*self.nbp)
 
-        dXdtb = self.potentialb1(x,y,t)
+        dXdtb = self.Potential1(x,y,t)
         dXdt[:self.nbp] = -dXdtb[0]
         dXdt[self.nbp:] = dXdtb[1]
 
         return dXdt
 
-    def modelx2(self,t,X):
+    def Model2(self,t,X):
         x = X[:self.nbp]
         y = X[self.nbp:]
         dXdt = np.zeros(2*self.nbp)
 
-        dXdtb = self.potentialb2(x,y,t)
+        dXdtb = self.Potential2(x,y,t)
         dXdt[:self.nbp] = dXdtb[0]
         dXdt[self.nbp:] = dXdtb[1]
 
         return dXdt
 
-    def dynamicsb(self):
+    def Dynamics(self):
 
         x = self.x
         y = self.y
-        xb = self.xb
-        yb = self.yb
-        dx = self.dx
-        dy = self.dy
 
-        #X0 = [x[0],y[0]]
-        X0b = np.zeros(2*self.nbp)
-        X0b[:self.nbp] = xb[:,0]
-        X0b[self.nbp:] = yb[:,0]
+        X0 = np.zeros(2*self.nbp)
+        X0[:self.nbp] = x[:]
+        X0[self.nbp:] = y[:]
+
+        n = int(self.dt)
+        N = int(self.T)
 
         if self.choixOrdreGyro == 0:
-            modelx = self.modelx0
+            Modelx = self.Model0
         elif self.choixOrdreGyro == 1:
-            modelx = self.modelx1
+            Modelx = self.Model1
         else:
-        	modelx = self.modelx2
+        	Modelx = self.Model2
 
         if self.choixInt==0:
             t = 2*np.pi*np.arange(self.T)
 
-            s = odeint(modelx,X0b,t,atol=10**(-6),rtol=10**(-6),tfirst=True)
+            s = odeint(Modelx,X0,t,atol=10**(-6),rtol=10**(-6),tfirst=True)
 
             x = s[:,:self.nbp]
             y = s[:,self.nbp:]
@@ -346,7 +155,7 @@ class Hamilton:
         elif self.choixInt==1:
             t = 2*np.pi*np.arange(int(self.T))
 
-            s = solve_ivp(modelx,(0,2*np.pi*int(self.T)),X0b,t_eval=t,atol=10**(-6),rtol=10**(-6))
+            s = solve_ivp(Modelx,(0,2*np.pi*int(self.T)),X0,t_eval=t,atol=10**(-6),rtol=10**(-6))
 
             x = s.y[:self.nbp,:]
             y = s.y[self.nbp:,:]
@@ -354,43 +163,32 @@ class Hamilton:
             y=np.transpose(y)
 
         elif self.choixInt==2:
-            #n = int(2*np.pi/self.dt)
-            #N = int(self.T/(2*np.pi))
-            n = int(self.dt)
-            N = int(self.T)
             self.dt = 2*np.pi/n
             self.T = 2*np.pi*N
-            s = self.rungekuttasimpson(modelx,X0b,self.T,self.dt)
+            s = self.RungeKutta(Modelx,X0,self.T,self.dt)
 
             x = s[:self.nbp,0:N*n:n]
             y = s[self.nbp:,0:N*n:n]
             x=np.transpose(x)
             y=np.transpose(y)
 
-        elif self.choixInt==3:
-            v0 = np.zeros(2*self.nbp)
-            v0 = np.random.rand(2*self.nbp,1)*2*np.pi
+        nTrapped = 0
+        for i in range(self.nbp):
+            if np.all((np.abs(x[0,i]-x[:,i])<2*np.pi)):
+                nTrapped+=1
+        #print('nTrapped')
+        #print(nTrapped)
+        """
+        r2 = np.zeros(N)
+        for i in range(N):
+            r2[i] = 1/(self.T-i*self.dt)*np.mean(np.sum((x[0+i:N]-x[0:N-i])**2+(y[0+i:N]-y[0:N-i])**2,axis=1))
+        t = np.arange(N)*2*np.pi
+        slope, intercept, r, p, se = linregress(t, r2)
+        """
+        slope = 0
+        #print('slope')
+        #print(slope)
+        #plt.plot(t,r2)
+        #plt.savefig('r2.png')
 
-            s = self.leapfrog(modelx,X0b,v0,self.T,self.dt)
-
-            x = s[:self.nbp,0:int(self.T/self.dt):int(2*np.pi)]
-            y = s[self.nbp:,0:int(self.T/self.dt):int(2*np.pi)]
-            x=np.transpose(x)
-            y=np.transpose(y)
-
-        return x,y
-
-    def dynamics(self):
-        for i in range(int(self.T/self.dt)):
-            if self.rho==0:
-            	self.xnp = self.xnp - 2*np.pi*self.A*np.sin(self.xnm)	#(x+y)
-            	self.xnm = self.xnm + 2*np.pi*self.A*np.sin(self.xnp)	#(x-y)
-            else:
-            	self.xnp = self.xnp - 2*np.pi*self.A*spc.jv(0,self.rho*np.sqrt(2))*np.sin(self.xnm)	#(x+y)
-            	self.xnm = self.xnm + 2*np.pi*self.A*spc.jv(0,self.rho*np.sqrt(2))*np.sin(self.xnp)	#(x-y)
-
-            self.x.append((self.xnp + self.xnm)/2)
-            self.y.append((self.xnp - self.xnm)/2)
-
-        return(self.x,self.y)
-
+        return x,y,nTrapped,slope
